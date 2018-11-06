@@ -21,4 +21,8 @@ impl Memory {
     pub fn mem_read(&self, addr: u16) -> u16 {
        self.data[addr as usize]
     }
+    
+    pub fn mem_size(&self) -> usize {
+        self.data.len()
+    }
 }
