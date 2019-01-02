@@ -10,6 +10,7 @@ use self::memory::Memory;
 use std::io;
 use std::io::prelude::*;
 use std::fs::File;
+use std::result;
 
 pub struct Chip8 {
     cpu: CPU,
@@ -27,7 +28,6 @@ impl Chip8 {
     }
     pub fn init(&mut self) {
         self.memory.mem_init();
-        self.memory.mem_write(0x1, 0x15);
     }
 
     pub fn get_mem(&self, addr: u16) -> u16 {
@@ -38,8 +38,8 @@ impl Chip8 {
 	  * FIXME: Rewrite it with iterator.
 	  *
 	  */
-    pub fn load_game(&mut self, file_path: &String) -> io::Result<()> {
-        let mut file = File::open(file_path).unwrap();
+    pub fn load_game(&mut self, file_path: &str) -> io::Result<()> {
+        let file = File::open(file_path).unwrap();
         let filebytes: Vec<u8> = file.bytes().map(|readbyte| readbyte.unwrap()).collect();
 		let mut j: usize = 0;
         for i in 0..self.memory.mem_size() {
@@ -47,8 +47,11 @@ impl Chip8 {
 			let lsb: u8 = filebytes[j + 1];
 			j = j + 2;
             self.memory.mem_write(self.cpu.pc + i as u16, ((msb as u16) << 8) | (lsb as u16));
-            
         }
         Ok(())
+    }
+
+    pub fn emulate_cycle(&mut self) -> Result<(), &'static str> {
+        self.cpu.execute(&mut self.memory)
     }
 }
