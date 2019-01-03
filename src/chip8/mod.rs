@@ -30,7 +30,7 @@ impl Chip8 {
         self.memory.mem_init();
     }
 
-    pub fn get_mem(&self, addr: u16) -> u16 {
+    pub fn get_mem(&self, addr: u16) -> u8 {
         self.memory.mem_read(addr)
     }
 
@@ -41,13 +41,16 @@ impl Chip8 {
     pub fn load_game(&mut self, file_path: &str) -> io::Result<()> {
         let file = File::open(file_path).unwrap();
         let filebytes: Vec<u8> = file.bytes().map(|readbyte| readbyte.unwrap()).collect();
-		let mut j: usize = 0;
-        for i in 0..self.memory.mem_size() {
-            let msb: u8 = filebytes[j];
-			let lsb: u8 = filebytes[j + 1];
-			j = j + 2;
-            self.memory.mem_write(self.cpu.pc + i as u16, ((msb as u16) << 8) | (lsb as u16));
+		for (i, &data) in filebytes.iter().enumerate() {
+            self.memory.mem_write(self.cpu.pc + i as u16, data);
         }
+        //let mut j: usize = 0;
+        //for i in 0..self.memory.mem_size() {
+        //    let msb: u8 = filebytes[j];
+		//	let lsb: u8 = filebytes[j + 1];
+		//	j = j + 2;
+        //    self.memory.mem_write(self.cpu.pc + i as u16, ((msb as u16) << 8) | (lsb as u16));
+        //}
         Ok(())
     }
 

@@ -43,7 +43,7 @@ impl CPU {
     }
 
     pub fn execute(&mut self, memory: & mut Memory) -> Result<(), &'static str> {
-        let opcode = memory.mem_read(self.pc); 
+        let opcode: u16 = (memory.mem_read(self.pc) as u16) << 8 | memory.mem_read(self.pc + 1) as u16; 
 
         match opcode & CHIP8_CODE_TYPE_MASK {
         0x0 =>  match opcode & CHIP8_SUBCODE_TYPE_MASK {
@@ -127,6 +127,28 @@ impl CPU {
             self.bitwise_random(r_x, nn);
             Ok(())
         },
+        0xD000 => {
+            Err("Not implementedyet")
+        },
+        0xE000 => {
+            Err("Not implementedyet")
+        },
+        0xF000 => {
+            let r_x = ((opcode & CHIP8_REGISTER_X_MASK) >> 8) as usize;
+            match opcode & 0x00FF {
+            0x0007 => self.delay_get(r_x),
+            0x000A => return Err(""),
+            0x0015 => self.delay_set(r_x),
+            0x0018 => self.sound_timer_set(r_x),
+            0x001E => self.index_add(r_x),
+            0x0029 => return Err(""),
+            0x0033 => self.bcd_set(memory, r_x),
+            0x0055 => self.reg_dump(memory, r_x),
+            0x0065 => self.reg_load(memory, r_x),
+            _ => (),
+            };
+            Ok(())
+        }
         _ => Err(""),
         }
     }
@@ -271,7 +293,46 @@ impl CPU {
         self.pc_next();
     }
 
-    fn pc_next(& mut self) {
-        self.pc = self.pc + 1;
+    fn delay_get(&mut self, r_x: usize) {
+        self.registers[r_x] = self.delay_timer;
+        self.pc_next();
+    }
+
+    fn delay_set(&mut self, r_x: usize) {
+        self.delay_timer = self.registers[r_x];
+        self.pc_next();
+    }
+    
+    fn sound_timer_set(&mut self, r_x: usize) {
+        self.sound_timer = self.registers[r_x];
+        self.pc_next();
+    }
+
+    fn index_add(&mut self, r_x: usize) {
+        self.index += self.registers[r_x] as u16;
+        self.pc_next();
+    }
+
+    fn bcd_set(&mut self, mem: &mut Memory, r_x: usize) {
+        mem.mem_write(self.index, self.registers[r_x] / 100);
+        mem.mem_write(self.index, self.registers[r_x] % 100 / 10);
+        mem.mem_write(self.index, self.registers[r_x] % 10);
+        self.pc_next();
+    }
+
+    fn reg_dump(&mut self, mem: &mut Memory, r_x: usize) {
+        for (i, &data) in self.registers.iter().enumerate().take(r_x + 1) {
+            mem.mem_write(self.index + i as u16 , data); 
+        }
+    }
+
+    fn reg_load(&mut self, mem: &mut Memory, r_x: usize) {
+        for i in 0..r_x + 1 {
+            self.registers[i] = mem.mem_read(self.index + i as u16); 
+        }
+    }
+
+    fn pc_next(&mut self) {
+        self.pc = self.pc + 2;
     }
 }
