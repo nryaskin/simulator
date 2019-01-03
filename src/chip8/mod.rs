@@ -71,6 +71,6 @@ impl Chip8 {
     }
 
     pub fn emulate_cycle(&mut self) -> Result<(), &'static str> {
-        self.cpu.execute(&mut self.memory)
+        self.cpu.execute(&mut self.memory, &mut self.gr)
     }
 }

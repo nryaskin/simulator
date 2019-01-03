@@ -2,6 +2,7 @@
 extern crate rand;
 
 use super::memory::Memory;
+use super::graphics::Graphics;
 use std::result;
 use self::rand::prelude::*;
 
@@ -16,6 +17,7 @@ const CHIP8_NN_MASK:            u16     = 0x00FF;
 const CHIP8_NNN_MASK:           u16     = 0x0FFF;       
 const CHIP8_VF_REGISTER:        usize   = 0xF;
 const CHIP8_V0_REGISTER:        usize   = 0x0;
+const CHIP8_KEY_COUNT:          usize   = 16;
 
 pub struct CPU {
     //pub opcode : u16,
@@ -23,6 +25,7 @@ pub struct CPU {
     pub pc : u16,
     registers: [u8; CHIP8_REGISTER_COUNT], 
     stack: [u16; CHIP8_STACK_SIZE],
+    key: [bool; CHIP8_KEY_COUNT],
     sp: u16,
     delay_timer: u8,
     sound_timer: u8,
@@ -36,13 +39,16 @@ impl CPU {
                 pc :         0x200,
                 registers:  [0x0; CHIP8_REGISTER_COUNT],
                 stack:      [0x0; CHIP8_STACK_SIZE],
+                key:        [false; CHIP8_KEY_COUNT],
                 sp:          0x0,
                 delay_timer: 0x0,
                 sound_timer: 0x0,
         }
     }
 
-    pub fn execute(&mut self, memory: & mut Memory) -> Result<(), &'static str> {
+    pub fn execute(&mut self, memory: & mut Memory, gr: &mut Graphics)
+        -> Result<(), &'static str>
+    {
         let opcode: u16 = (memory.mem_read(self.pc) as u16) << 8
                            | memory.mem_read(self.pc + 1) as u16; 
 
@@ -96,8 +102,8 @@ impl CPU {
             let r_y: usize = (opcode & CHIP8_REGISTER_Y_MASK >> 4) as usize;
             match opcode & CHIP8_SUBCODE_TYPE_MASK {
             0x0 =>  self.reg_assing(r_x, r_y),
-            0x0001 => self.reg_assing(r_x, r_y),
-            0x0002 => self.bit_or(r_x, r_y),
+            0x0001 => self.bit_or(r_x, r_y),
+            0x0002 => self.bit_and(r_x, r_y),
             0x0003 => self.bit_xor(r_x, r_y),
             0x0004 => self.math_add(r_x, r_y),
             0x0005 => self.math_sub(r_x, r_y),
@@ -129,20 +135,34 @@ impl CPU {
             Ok(())
         },
         0xD000 => {
-            Err("Not implementedyet")
+            let r_x: usize = ((opcode & CHIP8_REGISTER_X_MASK) >> 8) as usize;
+            let r_y: usize = (opcode & CHIP8_REGISTER_Y_MASK >> 4) as usize;
+            let height = opcode & 0x000F;
+            self.draw(memory, gr, r_x, r_y, height); 
+            Ok(())
         },
         0xE000 => {
-            Err("Not implementedyet")
+            let r_x = ((opcode & CHIP8_REGISTER_X_MASK) >> 8) as usize;
+            match opcode & 0x00FF {
+            0x009E => {
+                self.key_pressed(r_x);     
+            }, 
+            0x00A1 => {
+                self.other_key_pressed(r_x);
+            },
+            _ => return Err("Unknown command"),
+            }
+            Ok(())
         },
         0xF000 => {
             let r_x = ((opcode & CHIP8_REGISTER_X_MASK) >> 8) as usize;
             match opcode & 0x00FF {
             0x0007 => self.delay_get(r_x),
-            0x000A => return Err(""),
+            0x000A => self.key_await(r_x),
             0x0015 => self.delay_set(r_x),
             0x0018 => self.sound_timer_set(r_x),
             0x001E => self.index_add(r_x),
-            0x0029 => return Err(""),
+            0x0029 => self.sprite_location_set(r_x),
             0x0033 => self.bcd_set(memory, r_x),
             0x0055 => self.reg_dump(memory, r_x),
             0x0065 => self.reg_load(memory, r_x),
@@ -337,11 +357,60 @@ impl CPU {
         for (i, &data) in self.registers.iter().enumerate().take(r_x + 1) {
             mem.mem_write(self.index + i as u16 , data); 
         }
+        self.pc_next();
     }
 
     fn reg_load(&mut self, mem: &mut Memory, r_x: usize) {
         for i in 0..r_x + 1 {
             self.registers[i] = mem.mem_read(self.index + i as u16); 
+        }
+        self.pc_next()
+    }
+
+    fn draw(&mut self, mem: &mut Memory, gr: &mut Graphics, r_x: usize, r_y: usize, height: u16) {
+        let mut pixel;
+        let x: u16 = self.registers[r_x] as u16;
+        let y: u16 = self.registers[r_y] as u16;
+ 
+        self.registers[CHIP8_VF_REGISTER] = 0;
+        for yline in 0..height {
+            pixel = mem.mem_read(self.index + yline);
+            for xline in 0..8 {
+                if (pixel & (0x80 >> xline)) != 0 {
+                    if gr.gfx[(x + xline + ((y + yline) * 64)) as usize] == 1 {
+                        self.registers[CHIP8_VF_REGISTER] = 1;         
+                    }
+                    gr.gfx[(x + xline + ((y + yline) * 64)) as usize] ^= 1;
+                }
+            }
+        }
+        gr.draw_flag_set();
+        self.pc_next();
+    }
+
+    fn sprite_location_set(&mut self, r_x: usize) {
+        self.index = self.registers[r_x] as u16 * 0x5;
+        self.pc_next();
+    }
+
+    fn key_pressed(&mut self, r_x: usize) {
+        if self.key[self.registers[r_x] as usize] {
+            self.pc_next();
+        }
+        self.pc_next();
+    }
+
+    fn other_key_pressed(&mut self, r_x: usize) {
+        if !self.key[self.registers[r_x] as usize] {
+            self.pc_next();
+        }
+        self.pc_next();
+    }
+
+    fn key_await(&mut self, r_x: usize) {
+        if let Some((i, _)) = self.key.iter().enumerate().find(|(_, &data)| data) {
+            self.registers[r_x] = i as u8;
+            self.pc_next();
         }
     }
 
