@@ -43,9 +43,10 @@ impl CPU {
     }
 
     pub fn execute(&mut self, memory: & mut Memory) -> Result<(), &'static str> {
-        let opcode: u16 = (memory.mem_read(self.pc) as u16) << 8 | memory.mem_read(self.pc + 1) as u16; 
+        let opcode: u16 = (memory.mem_read(self.pc) as u16) << 8
+                           | memory.mem_read(self.pc + 1) as u16; 
 
-        match opcode & CHIP8_CODE_TYPE_MASK {
+        let result = match opcode & CHIP8_CODE_TYPE_MASK {
         0x0 =>  match opcode & CHIP8_SUBCODE_TYPE_MASK {
                 0x0000 => {
                     self.disp_clear(memory);
@@ -150,7 +151,19 @@ impl CPU {
             Ok(())
         }
         _ => Err(""),
+        };
+
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
         }
+
+        if self.sound_timer > 0 {
+            if self.sound_timer == 1 {
+               //TODO: Add sound callback. 
+            }
+            self.sound_timer -= 1;
+        }
+        return result;
     }
 
     fn goto(&mut self, addr: u16) {
@@ -315,8 +328,8 @@ impl CPU {
 
     fn bcd_set(&mut self, mem: &mut Memory, r_x: usize) {
         mem.mem_write(self.index, self.registers[r_x] / 100);
-        mem.mem_write(self.index, self.registers[r_x] % 100 / 10);
-        mem.mem_write(self.index, self.registers[r_x] % 10);
+        mem.mem_write(self.index + 1, self.registers[r_x] % 100 / 10);
+        mem.mem_write(self.index + 2, self.registers[r_x] % 10);
         self.pc_next();
     }
 
